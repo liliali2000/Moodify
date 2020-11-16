@@ -1,5 +1,13 @@
 .App {
     text-align: center;
+    align-items: center;
+    align-content: center;
+}
+
+.App2 {
+    text-align: left !important;
+    align-items: center;
+    align-content: center;
 }
 
 .App-logo {
@@ -37,10 +45,10 @@
     }
 }
 
-div,
+/* div,
 button {
     margin: 10px;
-}
+} */
 
 .logo {
     height: 100px;

@@ -1,18 +1,27 @@
 import React, { Component } from 'react';
 import './App.css';
 import SpotifyWebApi from 'spotify-web-api-js';
-import { Field, Form, Formik, withFormik } from 'formik';
-import Select from 'react-select';
-import * as Yup from 'yup';
-
+import { Field, Form, Formik } from 'formik';
+import Button from 'react-bootstrap/Button';
+import { Row, Col, Container } from 'react-bootstrap';
+import 'bootstrap/dist/css/bootstrap.min.css';
+import FormControl from 'react-bootstrap/FormControl';
+import FormGroup from 'react-bootstrap/FormGroup';
 import MultiSelect from '@khanacademy/react-multi-select';
-import selectPanel from '@khanacademy/react-multi-select/dist/select-panel';
+import Documentation from './components/documentation';
 const spotifyApi = new SpotifyWebApi();
 
 /* 
+
+To-do:
+ - Style with bootstrap
+ - clean up code (start with putting doc page in own js)
+
 library documentation: 
 https://doxdox.org/jmperez/spotify-web-api-js#src-spotify-web-api.js-constr.prototype.getme
 
+palette:
+https://www.color-hex.com/color-palette/53188
 */
 
 class App extends Component {
@@ -26,6 +35,7 @@ class App extends Component {
         this.state = {
             loggedIn: token ? true : false,
             playlistCreated: false,
+            documentation: false,
             nowPlaying: { name: 'Not Checked', albumArt: '' },
             name: '',
             description: '',
@@ -48,29 +58,6 @@ class App extends Component {
             e = r.exec(q);
         }
         return hashParams;
-    }
-
-    async getTrackIds() {
-        let arr = [];
-        for (var idIndex in this.state.selected) {
-            try {
-                for (var i = 0; i < 5; i++) {
-                    let prom = spotifyApi.getPlaylistTracks(
-                        this.state.selected[idIndex],
-                        {
-                            offset: 100 * i,
-                        }
-                    );
-                    let data = await prom;
-                    for (var index in data.items) {
-                        arr.push(data.items[index].track.id);
-                    }
-                }
-            } catch (err) {
-                console.error(err);
-            }
-        }
-        return arr;
     }
 
     async createEmpty() {
@@ -98,21 +85,38 @@ class App extends Component {
         }
     }
 
-    async createPlaylistFinal() {
-        let newPlaylistId = await this.createEmpty();
-        let trackIds = await this.getAudioFeatures(
-            this.state.mood,
-            this.state.maxS
-        );
-        let realTrackIds = [];
-        for (var id of trackIds) {
-            realTrackIds.push('spotify:track:' + id);
+    moodSorting(audioFeatures, mood) {
+        if (mood === 'happy') {
+            audioFeatures.sort((a, b) => b.valence - a.valence);
+        } else if (mood === 'sad') {
+            audioFeatures.sort((a, b) => a.valence - b.valence);
+        } else if (mood === 'dance') {
+            audioFeatures.sort((a, b) => b.danceability - a.danceability);
+        } else if (mood === 'fast') {
+            audioFeatures.sort((a, b) => b.tempo - a.tempo);
+        } else if (mood === 'slow') {
+            audioFeatures.sort((a, b) => a.tempo - b.tempo);
+        } else if (mood === 'workout') {
+            audioFeatures.sort(
+                (a, b) =>
+                    a.acousticness +
+                    b.energy +
+                    b.tempo / 250 -
+                    (b.acousticness + a.energy + a.tempo / 250)
+            );
+        } else if (mood === 'chill') {
+            audioFeatures.sort(
+                (a, b) =>
+                    Math.abs(a.energy - 0.5) +
+                    Math.abs(a.acousticness - 0.5) -
+                    (Math.abs(b.energy - 0.5) + Math.abs(b.acousticness - 0.5))
+            );
         }
-        await this.addToPlaylist(newPlaylistId, realTrackIds);
-        console.log('done!');
+
+        return audioFeatures;
     }
 
-    async getAudioFeatures(mood, maxSongs) {
+    async getSortedTracks(mood, maxSongs) {
         console.log(mood);
         console.log(maxSongs);
 
@@ -148,19 +152,29 @@ class App extends Component {
             let data2 = await spotifyApi.getAudioFeaturesForTracks(tempIds);
             audioFeatures = audioFeatures.concat(data2.audio_features);
         }
-        if (mood === 'happy') {
-            audioFeatures.sort((a, b) => b.valence - a.valence);
-        } else if (mood === 'sad') {
-            audioFeatures.sort((a, b) => a.valence - b.valence);
-        } else if (mood === 'dance') {
-            audioFeatures.sort((a, b) => b.danceability - a.danceability);
-        }
+
+        audioFeatures = this.moodSorting(audioFeatures, mood);
         audioFeatures = audioFeatures.slice(0, maxSongs);
         let finalArr = [];
         for (var object of audioFeatures) {
             finalArr.push(object.id);
         }
+        console.log(finalArr);
         return finalArr;
+    }
+
+    async createPlaylist() {
+        let newPlaylistId = await this.createEmpty();
+        let trackIds = await this.getSortedTracks(
+            this.state.mood,
+            this.state.maxS
+        );
+        let realTrackIds = [];
+        for (var id of trackIds) {
+            realTrackIds.push('spotify:track:' + id);
+        }
+        await this.addToPlaylist(newPlaylistId, realTrackIds);
+        console.log('done!');
     }
 
     async printAudioFeatures() {
@@ -199,8 +213,13 @@ class App extends Component {
         console.log('mounted and set state of sources!');
     }
 
+    handleSelectedChanged = (selected) => {
+        this.setState({ selected });
+    };
+
     render() {
-        if (this.state.loggedIn && this.state.playlistCreated === false) {
+        if (this.state.documentation === true) {
+            // documentation page
             return (
                 <div className="App">
                     <img
@@ -208,74 +227,296 @@ class App extends Component {
                         src="./moodify_logo_full.png"
                         alt="moodify logo"
                     />
-                    <Formik
-                        initialValues={{
-                            name: '',
-                            description: '',
-                            mood: 'happy',
-                            maxS: 0,
-                        }}
-                        onSubmit={(values, { setSubmitting }) => {
-                            setTimeout(() => {
-                                console.log(values);
-                                setSubmitting(false);
-                                this.setState((state) => {
-                                    return {
-                                        name: values.name,
-                                        description: values.description,
-                                        mood: values.mood,
-                                        maxS: values.maxS,
-                                        playlistCreated: true,
-                                    };
-                                });
-                                this.createPlaylistFinal();
-                            }, 400);
-                        }}
-                    >
-                        <Form>
-                            <br></br>Desired source playlists
-                            <MultiSelect
-                                options={this.state.userSources}
-                                selected={this.state.selected}
-                                onSelectedChanged={(selected) =>
-                                    this.setState({ selected })
-                                }
-                            />
-                            <br></br>Playlist Name
-                            <Field name="name" placeholder="Playlist name" />
-                            <br></br>Description
-                            <Field
-                                name="description"
-                                placeholder="Playlist description"
-                            />
-                            <br></br>Mood
-                            <Field as="select" name="mood">
-                                <option value="happy">Happy</option>
-                                <option value="sad">Sad</option>
-                                <option value="dance">Dance</option>
-                            </Field>
-                            <br></br>Max Songs
-                            <Field type="number" name="maxS" placeholder={0} />
-                            <br></br>
-                            <button type="submit">Create Playlist</button>
-                        </Form>
-                    </Formik>
                     <br></br>
-                    <button onClick={() => this.printAudioFeatures()}>
+                    <div className="App2">
+                        <Documentation />
+                        <Container>
+                            <Row>
+                                <Col></Col>
+                                <div className="App">
+                                    <Col>
+                                        <br></br>
+                                        <Button
+                                            variant="outline-success"
+                                            onClick={() =>
+                                                this.setState((state) => {
+                                                    return {
+                                                        documentation: false,
+                                                    };
+                                                })
+                                            }
+                                        >
+                                            Back to main
+                                        </Button>
+                                    </Col>
+                                </div>
+                                <Col></Col>
+                            </Row>
+                        </Container>
+                    </div>
+                </div>
+            );
+        } else if (
+            this.state.loggedIn &&
+            this.state.playlistCreated === false
+        ) {
+            // main app page, user hasn't created a playlist yet
+            return (
+                <div className="App">
+                    <img
+                        className="logo"
+                        src="./moodify_logo_full.png"
+                        alt="moodify logo"
+                    />
+
+                    <Container>
+                        <Row>
+                            <Col></Col>
+                            <Col xs={8}>
+                                <br></br>
+                                <h3 style={{ color: 'white' }}>Instructions</h3>
+                                <p style={{ color: 'white' }}>
+                                    Fill out the following form with the music
+                                    you would like to draw upon to create the
+                                    playlist, a name and description for your
+                                    new mood playlist, a mood, and maximum
+                                    number of songs to include in the new
+                                    playlist. Hit "create playlist" when you're
+                                    done to create the new mood playlist in your
+                                    Spotify account!
+                                </p>
+                                <div className="App2">
+                                    <Formik
+                                        initialValues={{
+                                            name: '',
+                                            description: '',
+                                            mood: 'happy',
+                                            maxS: 0,
+                                        }}
+                                        onSubmit={(
+                                            values,
+                                            { setSubmitting }
+                                        ) => {
+                                            setTimeout(() => {
+                                                console.log(values);
+                                                setSubmitting(false);
+                                                this.setState((state) => {
+                                                    return {
+                                                        name: values.name,
+                                                        description:
+                                                            values.description,
+                                                        mood: values.mood,
+                                                        maxS: values.maxS,
+                                                        playlistCreated: true,
+                                                    };
+                                                });
+                                                this.createPlaylist();
+                                            }, 400);
+                                        }}
+                                    >
+                                        <Form>
+                                            <br></br>
+                                            <text style={{ color: 'white' }}>
+                                                Desired source playlists
+                                            </text>
+                                            <MultiSelect
+                                                options={this.state.userSources}
+                                                selected={this.state.selected}
+                                                onSelectedChanged={
+                                                    this.handleSelectedChanged
+                                                }
+                                            />
+                                            <br></br>
+                                            <text style={{ color: 'white' }}>
+                                                Playlist Name
+                                            </text>
+                                            <Field
+                                                name="name"
+                                                render={({
+                                                    field,
+                                                    formProps,
+                                                }) => (
+                                                    <FormGroup controlId="name">
+                                                        <FormControl
+                                                            type={'text'}
+                                                            value={field.value}
+                                                            onChange={
+                                                                field.onChange
+                                                            }
+                                                            placeholder="Playlist name"
+                                                        />
+                                                    </FormGroup>
+                                                )}
+                                            />
+                                            <text style={{ color: 'white' }}>
+                                                Description
+                                            </text>
+                                            <Field
+                                                name="description"
+                                                render={({
+                                                    field,
+                                                    formProps,
+                                                }) => (
+                                                    <FormGroup controlId="description">
+                                                        <FormControl
+                                                            type={'text'}
+                                                            value={field.value}
+                                                            onChange={
+                                                                field.onChange
+                                                            }
+                                                            placeholder="Playlist description"
+                                                        />
+                                                    </FormGroup>
+                                                )}
+                                            />
+                                            <Row>
+                                                <Col></Col>
+                                                <Col>
+                                                    <text
+                                                        style={{
+                                                            color: 'white',
+                                                        }}
+                                                    >
+                                                        Mood
+                                                    </text>
+                                                    <Field
+                                                        name="mood"
+                                                        render={({
+                                                            field,
+                                                            formProps,
+                                                        }) => (
+                                                            <FormGroup controlId="mood">
+                                                                <FormControl
+                                                                    as="select"
+                                                                    onChange={
+                                                                        field.onChange
+                                                                    }
+                                                                >
+                                                                    <option value="happy">
+                                                                        Happy
+                                                                    </option>
+                                                                    <option value="sad">
+                                                                        Sad
+                                                                    </option>
+                                                                    <option value="dance">
+                                                                        Dance
+                                                                    </option>
+                                                                    <option value="fast">
+                                                                        Fast
+                                                                    </option>
+                                                                    <option value="slow">
+                                                                        Slow
+                                                                    </option>
+                                                                    <option value="workout">
+                                                                        Workout
+                                                                    </option>
+                                                                    <option value="chill">
+                                                                        Chill
+                                                                    </option>
+                                                                </FormControl>
+                                                            </FormGroup>
+                                                        )}
+                                                    />
+                                                    <text
+                                                        style={{
+                                                            color: 'white',
+                                                        }}
+                                                    >
+                                                        Max Songs
+                                                    </text>
+                                                    <Field
+                                                        name="maxS"
+                                                        render={({
+                                                            field,
+                                                            formProps,
+                                                        }) => (
+                                                            <FormGroup controlId="maxS">
+                                                                <FormControl
+                                                                    type={
+                                                                        'number'
+                                                                    }
+                                                                    value={
+                                                                        field.value
+                                                                    }
+                                                                    onChange={
+                                                                        field.onChange
+                                                                    }
+                                                                    placeholder={
+                                                                        0
+                                                                    }
+                                                                />
+                                                            </FormGroup>
+                                                        )}
+                                                    />
+                                                </Col>
+                                                <Col></Col>
+                                            </Row>
+                                            <br></br>
+                                            <div className="App">
+                                                <Button
+                                                    variant="success"
+                                                    type="submit"
+                                                >
+                                                    Create Playlist
+                                                </Button>
+                                            </div>
+                                            <br></br>.
+                                        </Form>
+                                    </Formik>
+                                </div>
+                            </Col>
+                            <Col></Col>
+                        </Row>
+                    </Container>
+                    <br></br>
+                    {/* <Button
+                        variant="primary"
+                        onClick={() => this.getSortedTracks('chill', 100)}
+                    >
                         button for testing functions
-                    </button>
+                    </Button> */}
+                    <br></br>
+                    <br></br>
+                    <Button
+                        variant="outline-success"
+                        onClick={() =>
+                            this.setState((state) => {
+                                return { documentation: true };
+                            })
+                        }
+                    >
+                        See documentation
+                    </Button>
                 </div>
             );
         } else if (this.state.loggedIn === false) {
+            // user not logged in
             return (
                 <div className="App">
-                    <a href="http://localhost:8888"> Login to Spotify </a>;
+                    <img
+                        className="logo"
+                        src="./moodify_logo_full.png"
+                        alt="moodify logo"
+                    />
+                    <br></br>
+                    <br></br>
+                    <Button
+                        variant="success"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            window.location.href = 'http://localhost:8888';
+                        }}
+                    >
+                        {' '}
+                        Login with Spotify
+                    </Button>
                 </div>
             );
         } else if (
             this.state.loggedIn === true &&
             this.state.playlistCreated === true
         ) {
+            // after a user creates a playlist
             return (
                 <div className="App">
                     <img
@@ -283,29 +524,24 @@ class App extends Component {
                         src="./moodify_logo_full.png"
                         alt="moodify logo"
                     />
-                    <h3>Playlist successfully created!</h3>
-                    <button
+                    <br></br>
+                    <h3 style={{ color: 'white' }}>
+                        Playlist successfully created!
+                    </h3>
+                    <br></br>
+                    <Button
+                        variant="success"
                         onClick={() =>
                             this.setState((state) => {
                                 return { playlistCreated: false };
                             })
                         }
                     >
-                        create another playlist
-                    </button>
+                        Create another playlist
+                    </Button>
                 </div>
             );
         }
-    }
-    getNowPlaying() {
-        spotifyApi.getMyCurrentPlaybackState().then((response) => {
-            this.setState({
-                nowPlaying: {
-                    name: response.item.name,
-                    albumArt: response.item.album.images[0].url,
-                },
-            });
-        });
     }
 }
 
