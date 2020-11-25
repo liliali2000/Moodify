@@ -1,10 +1,5 @@
 # Moodify
 
-Convergent Data Analysis App
-:carrot:
-Here is ryan's commit
-ryan's actual commit 2
+### Convergent Data Analysis App
 
-meeting 10/27 ryan commit
-:cake:
-:noodles!:
+-   I'm writing this bullet point so that I'll have something to "commit" for heroku deployment :)
