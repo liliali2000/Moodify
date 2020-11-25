@@ -12,10 +12,11 @@ var request = require('request'); // "Request" library
 var cors = require('cors');
 var querystring = require('querystring');
 var cookieParser = require('cookie-parser');
+require('dotenv').config();
 
 var client_id = 'b968ecabb92c46df87f25f267946f83e'; // Your client id
 var client_secret = 'df866825f300484ba5bf88e804baa5fb'; // Your secret
-var redirect_uri = 'http://localhost:8888/callback'; // Your redirect uri
+var redirect_uri = `${process.env.SERVER_URL}/callback`; // Your redirect uri
 
 /**
  * Generates a random string containing numbers and letters
@@ -112,7 +113,7 @@ app.get('/callback', function (req, res) {
 
                 // we can also pass the token to the browser to make requests from there
                 res.redirect(
-                    'http://localhost:3000/#' +
+                    `${process.env.CLIENT_URL}/#` +
                         querystring.stringify({
                             access_token: access_token,
                             refresh_token: refresh_token,
@@ -157,5 +158,10 @@ app.get('/refresh_token', function (req, res) {
     });
 });
 
-console.log('Listening on 8888');
-app.listen(8888);
+// console.log('Listening on 8888');
+// app.listen(8888);
+
+const PORT = process.env.PORT || 8888;
+
+app.listen(PORT);
+console.log(`Listening on ${PORT}`);
